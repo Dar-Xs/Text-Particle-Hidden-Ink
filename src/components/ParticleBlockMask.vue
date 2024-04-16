@@ -289,6 +289,7 @@ const resize = (event: MouseEvent) => {
 }
 .message {
   /* overflow: hidden; */
+  color: white;
   position: relative;
   flex-grow: 0;
   text-align: start;
