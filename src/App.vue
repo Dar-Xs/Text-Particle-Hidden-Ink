@@ -1,30 +1,17 @@
 <script setup lang="ts">
-import HelloWorld from "./components/HelloWorld.vue";
+import ParticleMask from "./components/ParticleBlockMask.vue";
 </script>
 
 <template>
-  <div>
-    <a href="https://vitejs.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
-  </div>
-  <HelloWorld msg="Vite + Vue" />
+  <h1>隐藏墨水 Demo</h1>
+  <ParticleMask />
+  <p>原理验证阶段早期 demo</p>
+  <p>通过 Canvas API 实现，粒子物理模拟完全通过 CPU 串行计算</p>
+  <p><strong>右侧抓手</strong>可以改变气泡宽度</p>
 </template>
 
 <style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+strong {
+  color: #4a7def;
 }
 </style>
