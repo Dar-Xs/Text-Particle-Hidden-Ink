@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import html2canvas from "html2canvas";
 
 // 配置
 const maskColor = "#387ef7";
@@ -7,8 +8,10 @@ const maskColor = "#387ef7";
 const diffusionRadius = 250; //px
 const maxSpeed = 30; //px/s
 const ttl = 500; //ms
-const radius = 1.4; //px
-const scale = 2;
+const particleRadius = 1.4; //px
+const canvasScale = 2;
+const straceRadius = 60; //px
+const minStraceDis = 5; //px
 
 const randInt = (lowerBound: number, upperBound: number) => {
   return lowerBound + Math.floor(Math.random() * (upperBound - lowerBound));
@@ -35,24 +38,37 @@ const delta = (a: vector2, b: vector2): vector2 => {
 };
 
 let particles: ParticleData[] = [];
-const initParticles = () => {
+const initParticles = (image: ImageData) => {
   particles = [];
   const density = 0.012;
-  const padding = 20; //px
+  // const padding = 20; //px
   //ParticleData需要传入，initParticles用于演示
   if (!canvasRef.value) {
     console.error("calling initParticles() with `canvasRef.value` undefine");
     return;
   }
   lastUpdateTime.value = Date.now();
-  const width = canvasRef.value.width - padding * 2;
-  const height = canvasRef.value.height - padding * 2;
+  const width = canvasRef.value.width;
+  const height = canvasRef.value.height;
   const count = Math.floor(width * height * density);
   for (let i = 0; i < count; i++) {
-    const startPosition: vector2 = [
-      randInt(padding, width + padding),
-      randInt(padding, height + padding),
-    ];
+    const startPosition: vector2 = [Math.random(), Math.random()];
+    const startIndex =
+      Math.floor(startPosition[0] * image.width) +
+      Math.floor(startPosition[1] * image.height) * image.width;
+
+    const brightness =
+      (((0.3 * image.data[4 * startIndex] +
+        0.59 * image.data[4 * startIndex + 1] +
+        0.11 * image.data[4 * startIndex + 2]) /
+        255) *
+        image.data[4 * startIndex + 3]) /
+      255;
+    if (brightness <= 0.03125) {
+      continue;
+    }
+    startPosition[0] = Math.floor(startPosition[0] * width);
+    startPosition[1] = Math.floor(startPosition[1] * height);
     const speed: vector2 = randSpeed();
     const tl = randInt(0, ttl);
     const position: vector2 = [
@@ -97,12 +113,19 @@ const updateStrace = (dt: number) => {
 const mouseMove = (payload: MouseEvent) => {
   mouseInside = true;
   const { offsetX, offsetY } = payload;
-  const current: vector2 = [offsetX * scale, offsetY * scale];
+  const current: vector2 = [offsetX * canvasScale, offsetY * canvasScale];
   if (mousePosition[0] == current[0] && mousePosition[1] == current[1]) {
     return;
   }
   mousePosition[0] = current[0];
   mousePosition[1] = current[1];
+  if (strace.length != 0) {
+    const lastStrace = strace[strace.length - 1];
+    const dis = distance(lastStrace.position, current);
+    if (dis < minStraceDis) {
+      return;
+    }
+  }
   strace.push({
     position: current,
     ttl: straceTTL,
@@ -150,7 +173,7 @@ const drawParticles = (ctx: CanvasRenderingContext2D) => {
     ctx.arc(
       particle.position[0],
       particle.position[1],
-      radius,
+      particleRadius,
       0,
       Math.PI * 2,
       true
@@ -162,10 +185,10 @@ const drawParticles = (ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createRadialGradient(
       position[0],
       position[1],
-      radius * 25 * percent,
+      (straceRadius / 2) * percent,
       position[0],
       position[1],
-      radius * 60
+      straceRadius
     );
     gradient.addColorStop(0, `rgba(0, 0, 0, ${percent})`);
     gradient.addColorStop(0.5, `rgba(0, 0, 0, ${0.866 * percent})`);
@@ -200,10 +223,21 @@ const refresh = () => {
 onMounted(() => {
   if (canvasRef.value) {
     ctx.value = canvasRef.value.getContext("2d") || undefined;
-    canvasRef.value.width = canvasRef.value.offsetWidth * scale;
-    canvasRef.value.height = canvasRef.value.offsetHeight * scale;
+    canvasRef.value.width = canvasRef.value.offsetWidth * canvasScale;
+    canvasRef.value.height = canvasRef.value.offsetHeight * canvasScale;
   }
-  if (particles.length === 0) initParticles();
+  if (messageRef.value) {
+    html2canvas(messageRef.value, {
+      backgroundColor: null,
+      scale: 0.25,
+    }).then((canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext("2d") || undefined;
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        initParticles(imageData);
+      }
+    });
+  }
   if (adjustHandleRef.value) {
     document.addEventListener("mousedown", (e) => {
       if (e.target !== adjustHandleRef.value) return;
@@ -223,25 +257,40 @@ const adjustHandleRef = ref<HTMLDivElement>();
 const resize = (event: MouseEvent) => {
   if (event.button !== 0) return;
   if (canvasRef.value) {
-    canvasRef.value.width = canvasRef.value.offsetWidth * scale;
-    canvasRef.value.height = canvasRef.value.offsetHeight * scale;
-    initParticles();
+    canvasRef.value.width = canvasRef.value.offsetWidth * canvasScale;
+    canvasRef.value.height = canvasRef.value.offsetHeight * canvasScale;
+    if (messageRef.value) {
+      html2canvas(messageRef.value, {
+        backgroundColor: null,
+        scale: 0.25,
+      }).then((canvas: HTMLCanvasElement) => {
+        const ctx = canvas.getContext("2d") || undefined;
+        if (ctx) {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          initParticles(imageData);
+        }
+      });
+    }
   }
 
   style.value += event.movementX * 2;
 };
+
+const messageRef = ref<HTMLDivElement>();
 </script>
 
 <template>
   <div class="adjust-card" :style="`width:${style}px`">
-    <div class="message">
-      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-      tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-      commodo consequat. Duis aute irure dolor in reprehenderit in voluptate
-      velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
-      cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id
-      est laborum.
+    <div class="message-shape">
+      <div ref="messageRef" class="message">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat. Duis aute irure dolor in reprehenderit in voluptate
+        velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint
+        occaecat cupidatat non proident, sunt in culpa qui officia deserunt
+        mollit anim id est laborum.
+      </div>
       <div class="tail">
         <div class="cut"></div>
       </div>
@@ -261,7 +310,6 @@ const resize = (event: MouseEvent) => {
 <style scoped>
 .adjust-card {
   margin: 0 auto;
-  /* height: 300px; */
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -287,16 +335,19 @@ const resize = (event: MouseEvent) => {
   height: 100%;
   border-radius: 12px;
 }
-.message {
-  /* overflow: hidden; */
-  color: white;
+.message-shape {
   position: relative;
   flex-grow: 0;
   text-align: start;
-  padding: 8px 14px;
   margin: 0;
   border-radius: 12px;
   background-color: #387ef7;
+}
+.message {
+  color: white;
+  text-align: start;
+  padding: 8px 14px;
+  margin: 0;
 }
 .tail {
   position: absolute;
